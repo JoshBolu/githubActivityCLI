@@ -56,4 +56,5 @@ MIT License
 
 **Author:**  
 Boluwatife Suyi-Ajayi Joshua  
-https://github.com/JoshBolu/githubActivityCLI
+**Project URL**
+https://roadmap.sh/projects/github-user-activity
