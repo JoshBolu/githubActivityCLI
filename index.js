@@ -5,7 +5,7 @@ const username = process.argv[2];
 async function fetchGitHubEvents(username) {
   try {
     const response = await fetch(
-      `https://api.github.com/users/${username}/events`,
+      `https://api.github.com/users/${username}/events?per_page=7`,
       {
         headers: {
           "User-Agent": "Node.js",
