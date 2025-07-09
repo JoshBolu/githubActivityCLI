@@ -1,34 +1,57 @@
+const { writeFileSync, readFileSync, existsSync } = require("fs"); //to read,write and check if file already exists
+const path = require("path"); // to make sure the file doesn't break when working on another machine
+
 const username = process.argv[2];
 
-// TODO add Cache mechanism
+const filePath = path.join(__dirname, "cache", `${username}.json`);
+console.log(filePath);
 
-async function fetchGitHubEvents(username) {
+async function fetchGitHubEvents(username, filePath) {
   try {
-    const response = await fetch(
-      `https://api.github.com/users/${username}/events?per_page=7`,
-      {
-        headers: {
-          "User-Agent": "Node.js",
-          Accept: "application/vnd.github.v3+json",
-        },
+    // Check if the cache file exists
+    if (existsSync(filePath)) {
+      return JSON.parse(readFileSync(filePath, "utf-8"));
+    } 
+
+    // If the cache file does not exist, fetch data from GitHub API
+    else {
+      // Check if username is provided
+      if (!username) {
+        throw new Error("Please provide a GitHub username as an argument.");
       }
-    );
-    const data = await response.json();
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error(`User '${username}' not found`);
-      } else if (response.status === 403) {
-        throw new Error(
-          "API rate limit exceeded. Consider using an authentication token."
-        );
-      } else {
-        throw new Error(
-          `HTTP error: ${response.status} ${response.statusText}`
-        );
+      // Fetch data from GitHub API
+      const response = await fetch(
+        `https://api.github.com/users/${username}/events?per_page=7`,
+        {
+          headers: {
+            "User-Agent": "Node.js",
+            Accept: "application/vnd.github.v3+json",
+          },
+        }
+      );
+      const data = await response.json();
+      // Write the fetched data to the cache file
+      writeFileSync(filePath, JSON.stringify(data));
+
+      // checks if the response is ok or not
+      if (!response.ok) {
+        // Handle specific HTTP errors
+        if (response.status === 404) {
+          throw new Error(`User '${username}' not found`);
+        } else if (response.status === 403) {
+          throw new Error(
+            "API rate limit exceeded. Consider using an authentication token."
+          );
+        } else {
+          throw new Error(
+            `HTTP error: ${response.status} ${response.statusText}`
+          );
+        }
       }
-    }
-    return data;
-  } catch (error) {
+      return data;
+    }  
+  } 
+  catch (error) {
     console.error(`Error fetching data: ${error}`);
     return []; // Return an empty array on error
   }
@@ -36,7 +59,7 @@ async function fetchGitHubEvents(username) {
 
 async function mainLogic() {
   try {
-    const EVENT = await fetchGitHubEvents(username);
+    const EVENT = await fetchGitHubEvents(username, filePath);
     // console.log(EVENT[7]);
 
     EVENT.map((event) => {
@@ -54,7 +77,9 @@ async function mainLogic() {
           if (event.payload.ref_type === "repository") {
             console.log(`You created a new repository: ${event.repo.name}.`);
           } else if (event.payload.ref_type === "branch") {
-            console.log(`you created a new branch: ${event.payload.ref} on ${event.repo.name}.`);
+            console.log(
+              `you created a new branch: ${event.payload.ref} on ${event.repo.name}.`
+            );
           } else {
             console.log(
               `you've made a new tag on ${event.repo.name} on the ${event.payload.master_branch} branch`
@@ -81,7 +106,7 @@ async function mainLogic() {
       }
     });
   } catch (error) {
-    console.error(`Error occured while fetching: ${error}`);
+    console.error(`Error occured getting data : ${error}`);
     console.log("Try again");
   }
 }
