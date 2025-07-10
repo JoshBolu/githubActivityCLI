@@ -4,13 +4,76 @@ const path = require("path"); // to make sure the file doesn't break when workin
 const username = process.argv[2];
 
 const filePath = path.join(__dirname, "cache", `${username}.json`);
-console.log(filePath);
+const FIVEMINUTES = 1000 * 60 * 5;
+
+async function callGithubApi(){
+  const response = await fetch(
+    `https://api.github.com/users/${username}/events?per_page=7`,
+    {
+      headers: {
+        "User-Agent": "Node.js",
+        Accept: "application/vnd.github.v3+json",
+      },
+    }
+  );
+
+  const data = await response.json();
+
+  // create a new object with the data and expiration time
+  const dataWithExpiration = {
+    data: data,
+    expiration: Date.now(),
+  };
+
+  // checks if the data is empty to check if to create a file or show you entered wrong name
+  if(data.length !== 0){
+    writeFileSync(filePath, JSON.stringify(dataWithExpiration));
+  }
+  else{
+    throw new Error("User not found");
+  }
+  
+
+  // checks if the response is ok or not
+  if (!response.ok) {
+    // Handle specific HTTP errors
+    if (response.status === 404) {
+      throw new Error(`User '${username}' not found`);
+    } else if (response.status === 403) {
+      throw new Error(
+        "API rate limit exceeded. Consider using an authentication token."
+      );
+    } else {
+      throw new Error(`HTTP error: ${response.status} ${response.statusText}`);
+    }
+  }
+  return data;
+}
+
+function isCacheFileValid(filePath){
+  const cachedFile = JSON.parse(readFileSync(filePath, "utf-8"));
+  const cachedExpiry = cachedFile.expiration;
+  Date.now() - cachedExpiry > FIVEMINUTES;
+  return true;
+}
 
 async function fetchGitHubEvents(username, filePath) {
   try {
     // Check if the cache file exists
     if (existsSync(filePath)) {
-      return JSON.parse(readFileSync(filePath, "utf-8"));
+      const cachedFile = JSON.parse(readFileSync(filePath, "utf-8"));
+      // check if the cache is stale- which is after 5 mins
+      const ifStale = isCacheFileValid(filePath)
+      if(ifStale){
+        // If the cache is stale, fetch new data from GitHub API
+        const data = await callGithubApi()
+        writeFileSync(filePath, JSON.stringify({ data, expiration: Date.now() }));
+        return data;
+      }
+      else{
+        // If the cache is not stale, return the cached data
+        return cachedFile.data;
+      }
     } 
 
     // If the cache file does not exist, fetch data from GitHub API
@@ -19,35 +82,8 @@ async function fetchGitHubEvents(username, filePath) {
       if (!username) {
         throw new Error("Please provide a GitHub username as an argument.");
       }
-      // Fetch data from GitHub API
-      const response = await fetch(
-        `https://api.github.com/users/${username}/events?per_page=7`,
-        {
-          headers: {
-            "User-Agent": "Node.js",
-            Accept: "application/vnd.github.v3+json",
-          },
-        }
-      );
-      const data = await response.json();
-      // Write the fetched data to the cache file
-      writeFileSync(filePath, JSON.stringify(data));
 
-      // checks if the response is ok or not
-      if (!response.ok) {
-        // Handle specific HTTP errors
-        if (response.status === 404) {
-          throw new Error(`User '${username}' not found`);
-        } else if (response.status === 403) {
-          throw new Error(
-            "API rate limit exceeded. Consider using an authentication token."
-          );
-        } else {
-          throw new Error(
-            `HTTP error: ${response.status} ${response.statusText}`
-          );
-        }
-      }
+      const data = await callGithubApi()
       return data;
     }  
   } 
